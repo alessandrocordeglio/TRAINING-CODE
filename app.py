@@ -2,17 +2,32 @@ import streamlit as st
 import pandas as pd
 import datetime
 import re
+import os
 
 st.set_page_config(page_title="Hybrid Optimizer", page_icon="⚡", layout="centered")
 
 st.title("⚡ Hybrid Training Optimizer — Alessandro")
-st.caption("Algoritmo di ottimizzazione: Ipertrofia + Performance Corsa")
+st.caption("Tracker integrato Corsa (NRC) + Palestra (RepCount / Manuale)")
 
-# --- INIZIALIZZAZIONE DATABASE ---
-if 'history' not in st.session_state:
-    st.session_state.history = pd.DataFrame(columns=[
+DB_FILE = "workouts_db.csv"
+
+# --- CARICAMENTO DATI PERMANENTI ---
+def load_data():
+    if os.path.exists(DB_FILE):
+        try:
+            df = pd.read_csv(DB_FILE)
+            return df
+        except Exception:
+            pass
+    return pd.DataFrame(columns=[
         "ID", "Data", "Tipo Seduta", "Km Corsa", "Passo (min/km)", "Tonnellaggio (kg)", "Carico Biologico"
     ])
+
+def save_data(df):
+    df.to_csv(DB_FILE, index=False)
+
+if 'history' not in st.session_state:
+    st.session_state.history = load_data()
 
 # --- TAB PRINCIPALI ---
 tab_insert, tab_charts, tab_manage = st.tabs(["📝 Registra Seduta", "📈 Progressi & Grafici", "⚙️ Gestisci / Elimina Dati"])
@@ -78,10 +93,10 @@ with tab_insert:
         gym_load = (total_tonnage / 100) * (gym_rpe / 10) if gym_type != "Nessuna" else 0
         total_daily_load = run_load + gym_load
         
-        # Generazione ID unico per la riga
-        new_id = len(st.session_state.history) + 1
+        # Generazione ID unico
+        existing_ids = st.session_state.history["ID"].tolist() if not st.session_state.history.empty else []
+        new_id = max(existing_ids) + 1 if existing_ids else 1
         
-        # Salvataggio nel dataframe temporaneo
         new_data = pd.DataFrame([{
             "ID": new_id,
             "Data": str(date),
@@ -93,9 +108,10 @@ with tab_insert:
         }])
         
         st.session_state.history = pd.concat([st.session_state.history, new_data], ignore_index=True)
-        st.success("✅ Seduta registrata con successo!")
+        save_data(st.session_state.history)
+        st.success("✅ Seduta registrata e salvata permanentemente!")
         
-        # Readiness & Consigli Algoritmo
+        # Output Algoritmo
         readiness = 100 - min(80, (total_daily_load * 0.5))
         
         st.divider()
@@ -106,13 +122,13 @@ with tab_insert:
         
         st.subheader("📋 Output Algoritmo di Ottimizzazione")
         if gym_type == "Gambe" and run_km > 6:
-            st.error("🚨 **ALERT INTERFERENZA / ROTULEO:** Hai stressato notevolmente le gambe. Domani **RIPOSO ASSOLUTO** o corsa facilissima < 4km a 5'30\"+ per preservare l'ipertrofia e i tendini.")
+            st.error("🚨 **ALERT INTERFERENZA / ROTULEO:** Carico elevato gambe + corsa nelle 24h. Domani **RIPOSO ASSOLUTO** o corsa facile < 4km.")
         elif gym_type in ["Push", "Pull"] and run_km > 0:
-            st.success(f"✅ **COMBO OTTIMALE:** {gym_type} + Corsa. Ottima combinazione senza sovraccaricare la catena cinetica inferiore. Domani puoi fare Gambe o un Lungo.")
+            st.success(f"✅ **COMBO OTTIMALE:** {gym_type} + Corsa. Ottimo stimolo ipertrofico upper body senza affaticare le gambe.")
         elif gym_type == "Gambe":
-            st.warning("🏋️ **LEG DAY COMPLETATO:** Evita ripetute o corse veloci per 24-48h.")
+            st.warning("🏋️ **LEG DAY COMPLETATO:** Evita ripetute o corse ad alta intensità per 24-48h.")
         elif run_km >= 12:
-            st.warning("🏃 **RECOVERY RUNNER:** Lungo importante completato. Limita i carichi pesanti su Squat/Leg Press nelle prossime 48h.")
+            st.warning("🏃 **RECOVERY RUNNER:** Lungo importante completato. Per 48h limita carichi pesanti su Squat/Leg Press.")
 
 # ==========================================
 # TAB 2: PROGRESSI & GRAFICI
@@ -123,32 +139,29 @@ with tab_charts:
     if not st.session_state.history.empty:
         df = st.session_state.history.copy()
         
-        # 1. Grafico Tonnellaggio per Tipologia (Push vs Pull vs Gambe)
         st.subheader("🏋️‍♂️ Tonnellaggio Palestra per Tipologia")
         df_gym = df[df["Tipo Seduta"].isin(["Push", "Pull", "Gambe"])]
         if not df_gym.empty:
             chart_gym = df_gym.pivot_table(index="Data", columns="Tipo Seduta", values="Tonnellaggio (kg)", aggfunc="sum").fillna(0)
             st.bar_chart(chart_gym)
         else:
-            st.info("Inserisci almeno una seduta di palestra per vedere il grafico dei volumi.")
+            st.info("Inserisci almeno una seduta di palestra per vedere i volumi.")
             
         st.divider()
         
-        # 2. Grafico Corsa: Passo vs Distanza
         st.subheader("🏃‍♂️ Efficienza Corsa (Km & Passo)")
         df_run = df[df["Km Corsa"] > 0]
         if not df_run.empty:
             st.line_chart(df_run.set_index("Data")[["Km Corsa", "Passo (min/km)"]])
         else:
-            st.info("Inserisci almeno una corsa per visualizzare il grafico della corsa.")
+            st.info("Inserisci almeno una corsa per vedere i dati.")
             
         st.divider()
         
-        # 3. Carico Biologico Totale nel tempo
         st.subheader("⚡ Carico Biologico Cumulativo (ACWR Indicator)")
         st.line_chart(df.set_index("Data")["Carico Biologico"])
     else:
-        st.info("Nessun dato registrato. Inserisci i tuoi allenamenti nel primo Tab per sbloccare i grafici.")
+        st.info("Nessun dato registrato. Inserisci una seduta nel primo Tab.")
 
 # ==========================================
 # TAB 3: GESTISCI / ELIMINA DATI
@@ -157,45 +170,30 @@ with tab_manage:
     st.header("⚙️ Gestione Storico Sedute")
     
     if not st.session_state.history.empty:
-        st.subheader("📋 Tabella Allenamenti Registrati")
+        st.subheader("📋 Allenamenti Salvati nel Database")
         st.dataframe(st.session_state.history, use_container_width=True)
         
         st.divider()
         
-        # MODULO ELIMINAZIONE
         st.subheader("❌ Elimina una Seduta")
         list_of_ids = st.session_state.history["ID"].tolist()
         selected_id = st.selectbox("Seleziona l'ID della seduta da eliminare:", list_of_ids)
         
         if st.button("🗑️ Elimina Seduta Selezionata"):
             st.session_state.history = st.session_state.history[st.session_state.history["ID"] != selected_id]
-            st.success(f"Seduta con ID {selected_id} eliminata correttamente!")
+            save_data(st.session_state.history)
+            st.success(f"Seduta ID {selected_id} eliminata e database aggiornato!")
             st.rerun()
             
         st.divider()
         
-        # BACKUP CSV
-        st.subheader("💾 Backup Dati")
+        st.subheader("💾 Backup Dati Manuale")
         csv_data = st.session_state.history.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Scarica Storico in CSV",
+            label="📥 Scarica Backup CSV",
             data=csv_data,
             file_name=f"hybrid_training_backup_{datetime.date.today()}.csv",
             mime="text/csv"
         )
     else:
-        st.info("Lo storico è attualmente vuoto.")
-        
-    st.divider()
-    
-    # RIPRISTINO DA FILE BACKUP
-    st.subheader("📤 Carica Backup CSV Precedente")
-    uploaded_backup = st.file_uploader("Se hai un file CSV salvato in precedenza, caricalo qui:", type=["csv"])
-    if uploaded_backup is not None:
-        try:
-            loaded_df = pd.read_csv(uploaded_backup)
-            st.session_state.history = loaded_df
-            st.success("Backup caricato con successo nel sistema!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Errore nel caricamento del file: {e}")
+        st.info("Lo storico è vuoto.")
