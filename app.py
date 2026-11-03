@@ -33,7 +33,7 @@ if 'history' not in st.session_state:
 tab_insert, tab_charts, tab_nutrition, tab_manage = st.tabs([
     "📝 Registra Seduta", 
     "📈 Progressi & Grafici", 
-    "🍽️ Target Macro", 
+    "🍽️ Target Macro & Piatti", 
     "⚙️ Gestisci / Elimina Dati"
 ])
 
@@ -172,11 +172,11 @@ with tab_charts:
         st.info("Nessun dato registrato. Inserisci una seduta nel primo Tab.")
 
 # ==========================================
-# TAB 3: TARGET MACRONUTRIENTI (MASSA & CORSA)
+# TAB 3: TARGET MACRONUTRIENTI & ESEMPIO PIATTI
 # ==========================================
 with tab_nutrition:
-    st.header("🍽️ Calcolatore Nutrizione Ipertrofica")
-    st.caption("Target giornaliero ottimizzato per massa magra ed efficienza di corsa")
+    st.header("🍽️ Calcolatore Nutrizione & Menu Pratico")
+    st.caption("Target ottimizzato per i tuoi 74 kg x 184 cm (Lean Bulk + Corsa)")
     
     col_p1, col_p2 = st.columns(2)
     user_weight = col_p1.number_input("Peso Corporeo (kg)", min_value=50.0, max_value=120.0, value=74.0, step=0.5)
@@ -187,8 +187,6 @@ with tab_nutrition:
     bmr = 10 * user_weight + 6.25 * user_height - 5 * 23 + 5
     tdee_base = bmr * 1.375
     
-    st.subheader("🎯 Fabbisogno Giornaliero Stimato")
-    
     last_km = 0.0
     last_gym = "Nessuna"
     if not st.session_state.history.empty:
@@ -198,24 +196,50 @@ with tab_nutrition:
     
     run_extra_calories = last_km * 65.0
     gym_extra_calories = 250.0 if last_gym in ["Push", "Pull", "Gambe"] else 0.0
-    
     target_calories = tdee_base + run_extra_calories + gym_extra_calories + 200.0
     
     protein_g = user_weight * 2.0
     fats_g = user_weight * 0.9
-    
-    protein_cal = protein_g * 4.0
-    fats_cal = fats_g * 9.0
-    carbs_cal = target_calories - (protein_cal + fats_cal)
+    carbs_cal = target_calories - ((protein_g * 4.0) + (fats_g * 9.0))
     carbs_g = max(150.0, carbs_cal / 4.0)
     
+    st.subheader("🎯 Macro Target di Oggi")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Calories", f"{int(target_calories)} kcal")
     m2.metric("Proteine", f"{int(protein_g)}g")
     m3.metric("Carboidrati", f"{int(carbs_g)}g")
     m4.metric("Grassi", f"{int(fats_g)}g")
     
-    st.info(f"💡 **Note dell'Algoritmo:** Il target include un surplus di +200 kcal per l'ipertrofia e **+{int(run_extra_calories)} kcal** di carboidrati per reintegrare i {last_km} km dell'ultima corsa.")
+    st.divider()
+    
+    # GRAMMATURE PRATICHE CALCOLATE SUI MACRO REALI
+    st.subheader("🥗 Menu Esempio e Porzioni Consigliate")
+    st.write(f"Per raggiungere **{int(target_calories)} kcal** senza appesantire il sistema digestivo:")
+    
+    # Calcolo porzioni dinamiche
+    colazione_fiocchi = int(80 + (last_km * 2))
+    pranzo_pasta = int(120 + (last_km * 4))
+    pranzo_carne = int(150 + (user_weight * 0.2))
+    cena_riso = int(140 + (last_km * 4))
+    cena_hamburger = int(180 + (user_weight * 0.3))
+    
+    st.markdown(f"""
+    * **🥣 COLAZIONE:**
+      * **{colazione_fiocchi}g** Fiocchi d'Avena + 250ml Latte + 1 Banana + 30g Proteine in polvere o 150g Yogurt Greco.
+    
+    * **🍝 PRANZO:**
+      * **{pranzo_pasta}g** Pasta o Riso (pesati a crudo) con pomodoro/verdure + 1 cucchiaio Olio EVO (10g).
+      * **{pranzo_carne}g** Petto di Pollo / Tacchino / Manzo magro.
+      * **70-80g** Pane per accompagnare.
+    
+    * **🍞 SPUNTINO / POST-CORSA:**
+      * 2 Toast / Fette di pane con **50g** Bresaola / Fesa di Tacchino + 1 Spremuta d'arancia o 1 Frutto.
+    
+    * **🍔 CENA (Reintegro Principale):**
+      * **{cena_riso}g** Riso Basmati (a crudo) *oppure* **{int(cena_riso * 3.3)}g** Patate al forno/vapore.
+      * **{cena_hamburger}g** Hamburger di Manzo (o 200g Salmone / Orata) ai ferri.
+      * 1,5 cucchiai Olio EVO (15g) + Verdure a scelta.
+    """)
 
 # ==========================================
 # TAB 4: GESTISCI / ELIMINA DATI
