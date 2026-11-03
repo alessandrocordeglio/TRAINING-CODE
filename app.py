@@ -30,7 +30,12 @@ if 'history' not in st.session_state:
     st.session_state.history = load_data()
 
 # --- TAB PRINCIPALI ---
-tab_insert, tab_charts, tab_manage = st.tabs(["📝 Registra Seduta", "📈 Progressi & Grafici", "⚙️ Gestisci / Elimina Dati"])
+tab_insert, tab_charts, tab_nutrition, tab_manage = st.tabs([
+    "📝 Registra Seduta", 
+    "📈 Progressi & Grafici", 
+    "🍽️ Target Macro", 
+    "⚙️ Gestisci / Elimina Dati"
+])
 
 # ==========================================
 # TAB 1: INSERIMENTO SEDUTA
@@ -88,12 +93,10 @@ with tab_insert:
                     if not any(char.isdigit() for char in line_str):
                         current_ex = line_str
 
-        # Formula Carico Biologico
         run_load = run_km * (60 / run_pace if run_pace > 0 else 0) * (run_rpe / 10)
         gym_load = (total_tonnage / 100) * (gym_rpe / 10) if gym_type != "Nessuna" else 0
         total_daily_load = run_load + gym_load
         
-        # Generazione ID unico
         existing_ids = st.session_state.history["ID"].tolist() if not st.session_state.history.empty else []
         new_id = max(existing_ids) + 1 if existing_ids else 1
         
@@ -111,7 +114,6 @@ with tab_insert:
         save_data(st.session_state.history)
         st.success("✅ Seduta registrata e salvata permanentemente!")
         
-        # Output Algoritmo
         readiness = 100 - min(80, (total_daily_load * 0.5))
         
         st.divider()
@@ -152,7 +154,13 @@ with tab_charts:
         st.subheader("🏃‍♂️ Efficienza Corsa (Km & Passo)")
         df_run = df[df["Km Corsa"] > 0]
         if not df_run.empty:
-            st.line_chart(df_run.set_index("Data")[["Km Corsa", "Passo (min/km)"]])
+            if len(df_run) == 1:
+                col_r1, col_r2 = st.columns(2)
+                col_r1.metric("Km Corsa", f"{df_run['Km Corsa'].iloc[0]} km")
+                col_r2.metric("Passo Medio", f"{df_run['Passo (min/km)'].iloc[0]} min/km")
+                st.bar_chart(df_run.set_index("Data")[["Km Corsa", "Passo (min/km)"]])
+            else:
+                st.line_chart(df_run.set_index("Data")[["Km Corsa", "Passo (min/km)"]])
         else:
             st.info("Inserisci almeno una corsa per vedere i dati.")
             
@@ -164,7 +172,53 @@ with tab_charts:
         st.info("Nessun dato registrato. Inserisci una seduta nel primo Tab.")
 
 # ==========================================
-# TAB 3: GESTISCI / ELIMINA DATI
+# TAB 3: TARGET MACRONUTRIENTI (MASSA & CORSA)
+# ==========================================
+with tab_nutrition:
+    st.header("🍽️ Calcolatore Nutrizione Ipertrofica")
+    st.caption("Target giornaliero ottimizzato per massa magra ed efficienza di corsa")
+    
+    col_p1, col_p2 = st.columns(2)
+    user_weight = col_p1.number_input("Peso Corporeo (kg)", min_value=50.0, max_value=120.0, value=74.0, step=0.5)
+    user_height = col_p2.number_input("Altezza (cm)", min_value=140, max_value=220, value=184, step=1)
+    
+    st.divider()
+    
+    bmr = 10 * user_weight + 6.25 * user_height - 5 * 23 + 5
+    tdee_base = bmr * 1.375
+    
+    st.subheader("🎯 Fabbisogno Giornaliero Stimato")
+    
+    last_km = 0.0
+    last_gym = "Nessuna"
+    if not st.session_state.history.empty:
+        last_row = st.session_state.history.iloc[-1]
+        last_km = last_row["Km Corsa"]
+        last_gym = last_row["Tipo Seduta"]
+    
+    run_extra_calories = last_km * 65.0
+    gym_extra_calories = 250.0 if last_gym in ["Push", "Pull", "Gambe"] else 0.0
+    
+    target_calories = tdee_base + run_extra_calories + gym_extra_calories + 200.0
+    
+    protein_g = user_weight * 2.0
+    fats_g = user_weight * 0.9
+    
+    protein_cal = protein_g * 4.0
+    fats_cal = fats_g * 9.0
+    carbs_cal = target_calories - (protein_cal + fats_cal)
+    carbs_g = max(150.0, carbs_cal / 4.0)
+    
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Calories", f"{int(target_calories)} kcal")
+    m2.metric("Proteine", f"{int(protein_g)}g")
+    m3.metric("Carboidrati", f"{int(carbs_g)}g")
+    m4.metric("Grassi", f"{int(fats_g)}g")
+    
+    st.info(f"💡 **Note dell'Algoritmo:** Il target include un surplus di +200 kcal per l'ipertrofia e **+{int(run_extra_calories)} kcal** di carboidrati per reintegrare i {last_km} km dell'ultima corsa.")
+
+# ==========================================
+# TAB 4: GESTISCI / ELIMINA DATI
 # ==========================================
 with tab_manage:
     st.header("⚙️ Gestione Storico Sedute")
